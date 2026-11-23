@@ -145,4 +145,160 @@ export const myReduce = (arr: any[], callback: (accumulator: any, currentValue: 
         accumulator = callback(accumulator, element, index);
     }
     return accumulator;
-} 
+}
+
+export const memoize = (callback: (...args: any[]) => any) => { // caches the funtion result and if next time call the fn with same args , will return the cache result
+    const map = new Map();
+    return (...args: any[]) => {
+        const key = JSON.stringify(args);
+        if (map.has(key)) {
+            return map.get(key);
+        }
+        else {
+            const result = callback(...args);
+            map.set(key, result);
+            return result
+        }
+    }
+}
+
+export const sleep = (time: number): Promise<void> => { //
+    return new Promise<void>((resolve) => {
+        setTimeout(() => {
+            resolve();
+        }, time)
+    })
+}
+
+export const retry = async (callback: (...args: any[]) => Promise<any>, times: number, ...args: any[]) => { // retry asyn request by specific times
+    let err;
+    for (let index = 0; index <= times; index++) {
+        try { // when asyn error , catch error and excute again
+            return await callback(...args);
+        } catch (error) {
+            err = error;
+        }
+    }
+    return err;
+}
+
+export const promiseAll = <T>(arr: Promise<T>[]) => { //put several promises in, and excute them concurrence. after all finish return all the result by new one promise
+    const resultList: any[] = [];
+    let times = 0;
+    return new Promise((resolve, reject) => { // A Promise can only settle once. Subsequent resolve/reject calls are ignored.
+        for (let index = 0; index < arr.length; index++) {
+            const element = arr[index];
+            element.then((res) => {
+                times++;
+                resultList[index] = res;
+                if (times === arr.length) resolve(resultList); // after all promise success , resolve the return promise.
+            }).catch(reject);
+        }
+    })
+}
+
+export const promiseRace = <T>(arr: Promise<T>[]): Promise<T> => {
+    return new Promise((resolve, reject) => {
+        for (const element of arr) {
+            element.then(resolve).catch(reject); // A Promise can only settle once. Subsequent resolve/reject calls are ignored.
+        }
+    })
+}
+
+export const promiseAllSettled = <T>(arr: Promise<T>[]): Promise<PromiseSettledResult<T>[]> => { // return all promise result , include failure
+    const resultList: PromiseSettledResult<T>[] = [];
+    let times: number = 0;
+    return new Promise((resolve) => {
+        if (arr.length === 0) {
+            resolve([]);
+            return;
+        }
+        arr.forEach((element, index) => {
+            element.then((value) => {
+                resultList[index] = { 'status': 'fulfilled', 'value': value };
+            }).catch((reason) => {
+                resultList[index] = { 'status': 'rejected', 'reason': reason };
+            }).finally(() => {
+                times++;
+                if (times === arr.length) resolve(resultList)
+            })
+        })
+    })
+}
+
+export const promisePool = <T>(arr: (() => Promise<T>)[], limit: number): Promise<PromiseSettledResult<T>[]> => { // limit how many asyn excute at once
+    const resultList: PromiseSettledResult<T>[] = [];
+    return new Promise(async (resolve, reject) => {
+        for (let i = 0; i < arr.length; i += limit) {
+            const pool = arr.slice(i, i + limit); // slice the limit size asyn to excute
+            let times = 0;
+            await new Promise<void>((resolve1) => {
+                pool.forEach((element, index) => {
+                    element().then((value) => {
+                        resultList[index + i] = { 'status': 'fulfilled', 'value': value };
+                    }).catch((reason) => {
+                        resultList[index + i] = { 'status': 'rejected', 'reason': reason };
+                    }).finally(() => {
+                        times++
+                        if (times === pool.length) resolve1();
+                    })
+                });
+            })
+        }
+        resolve(resultList);
+    })
+}
+
+class EventEmitter {
+    private event = new Map<string, Function>();
+    on = (name: string, callback: (...args: any[]) => void) => {
+        this.event.set(name, callback);
+    }
+    emit = (name: string, ...args: any[]) => {
+        const fn = this.event.get(name);
+        if (fn) {
+            fn(...args);
+        }
+    }
+    off = (name: string) => {
+        this.event.delete(name);
+    }
+}
+
+const once = (callback: (...args: any[]) => any) => {
+    let firstTime = true;
+    let result: any;
+    return (...args: any[]) => {
+        if (firstTime) {
+            firstTime = false;
+            result = callback(...args);
+        }
+        return result;
+    }
+}
+
+const MyThrottle = (callback: (...args: any[]) => any, limit: number) => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    return (...args: any[]) => {
+        if (timer === null) {
+            timer = setTimeout(() => {
+                timer = null;
+            }, limit);
+            callback(...args);
+        }
+    }
+}
+
+const MyDebounce = (callback: (...args: any[]) => any, delay: number) => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    return (...args: any[]) => {
+        if (timer !== null) {
+            clearTimeout(timer);
+        }
+        timer = setTimeout(() => {
+            timer = null;
+            callback(...args);
+        }, delay);
+    }
+}
+
